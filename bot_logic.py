@@ -12,7 +12,7 @@ def get_user(phone):
     row = cursor.fetchone()
     conn.close()
     if row: return {"name": row[0], "state": row[1], "last_results": json.loads(row[2]) if row[2] else [], "last_property": row[3], "last_type_desc": row[4]}
-    return {"name": None, "state": "new", "last_results": [], "last_property": None, "last_type_desc": None}
+    return {"name": None, "state": "new", "last_results": [], "last_type_desc": None}
 
 def update_user(phone, **kwargs):
     user = get_user(phone)
@@ -29,7 +29,7 @@ def process_message(phone, message):
     
     if user["state"] == "new":
         update_user(phone, state="awaiting_name")
-        return "Hola! soy *AGO*, te voy a ayudar a encontrar tu proximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar? 😊"
+        return "¡Hola! Soy *AGO*, te voy a ayudar a encontrar tu próximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar? 😊"
 
     if user["state"] == "awaiting_name":
         name = message.strip().title()
@@ -38,36 +38,35 @@ def process_message(phone, message):
 
     name = user["name"]
 
-    # --- LÓGICA DE REQUISITOS (DIFERENCIADA V1.19) ---
+    # --- LÓGICA DE REQUISITOS (V1.20 - COMPLETA) ---
     if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento']):
-        # Detectamos si es apartaestudio por el último inmueble visto o por la pregunta
         type_desc = (user["last_type_desc"] or "").lower()
         is_apartaestudio = "estudio" in type_desc or "estudio" in msg
         
         if is_apartaestudio:
-            # Requisitos explícitos para APARTAESTUDIOS
-            return f"""✅ *Requisitos para el Apartaestudio:*
-Para este tipo de inmueble el proceso es directo con nosotros. Necesitas enviar:
+            return f"""✅ *Requisitos para Apartaestudio (Proceso Directo):*
 
-1️⃣ *Cédula de ciudadanía* (Original o fotocopia al 150%).
-2️⃣ *Soporte de ingresos* (Extractos bancarios de los últimos 3 meses o Carta Laboral).
-3️⃣ *Dos Referencias* (Una familiar y una personal).
-4️⃣ *Depósito de provisión de servicios:* $150.000 (Único pago inicial).
+Para el arrendatario y el codeudor, se solicita:
+1️⃣ *Cédula de ciudadanía* (ampliada al 150%).
+2️⃣ *Soporte de ingresos* (Extractos bancarios últimos 3 meses o Carta Laboral).
+3️⃣ *Referencias* (1 Familiar y 1 Personal).
 
-*{name}*, una vez tengas los documentos, los puedes enviar por este medio para proceder con el contrato. 📝✨"""
+Adicionalmente:
+4️⃣ *Depósito de provisión de servicios:* $150.000 (pago único inicial).
+
+⚠️ *Importante:* Primero recibimos y verificamos toda la documentación. Una vez aprobada, procedemos con la firma del contrato.
+
+*{name}*, puedes enviar los documentos por este medio en PDF o fotos nítidas para iniciar el proceso. 📝✨"""
 
         else:
-            # Flujo para APARTAMENTOS (Mantiene El Libertador)
             papeleo = f"""✅ *Requisitos para Apartamentos:*
 Para estas propiedades el estudio se realiza con aseguradora. Necesitas:
-
 - Fotocopia de la *Cédula* al 150%.
-- *Carta Laboral* (no mayor a 30 días).
-- *Extractos bancarios* de los últimos 3 meses.
-- *Codeudor* solvente (con los mismos documentos)."""
+- *Carta Laboral* y *Extractos bancarios* (últimos 3 meses).
+- *Codeudor* solvente con la misma documentación."""
 
             tramite = f"""📄 *¡Aplica ahora mismo!*
-Como es un apartamento, debes realizar el estudio con **El Libertador** aquí:
+Debes realizar el estudio con **El Libertador** aquí:
 👉 https://www.ellibertador.co/
 
 🏢 *Datos para el formulario:*
@@ -79,14 +78,13 @@ Como es un apartamento, debes realizar el estudio con **El Libertador** aquí:
             return [papeleo, tramite]
 
     # --- DESPEDIDA ---
-    exit_words = ['gracias', 'ya agende', 'agendado', 'listo', 'adiós']
-    if any(k in msg for k in exit_words) and len(msg.split()) <= 6:
-        return f"¡Con todo el gusto, *{name}*! 😊 Me alegra haberte ayudado. ¡Cualquier otra cosa, aquí estaré! 🏠✨"
+    if any(k in msg for k in ['gracias', 'ya agende', 'agendado', 'adiós']):
+        return f"¡Con todo el gusto, *{name}*! 😊 Me alegra haberte ayudado. ¡Que tengas un excelente día! 🏠✨"
 
     # --- REDIRECCIÓN AL ASESOR ---
     if any(k in msg for k in ['asesor', 'persona', 'humano']):
         desc = user["last_type_desc"] or "un inmueble"
-        text = f"Hola, soy {name}. Interesado en {desc} y quiero hablar con un asesor."
+        text = f"Hola, soy {name}. Estoy interesado en {desc} y quiero hablar con un asesor."
         link = f"https://wa.me/{OWNER_NUMBER}?text={text.replace(' ', '%20')}"
         return f"¡Claro, *{name}*! 📱 Haz clic aquí para hablar directamente con Diego Ramirez:\n👉 {link}"
 
