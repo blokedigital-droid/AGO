@@ -1,7 +1,7 @@
 import sqlite3, json
 from sheets_service import search_properties, format_property_response, format_property_list, filter_properties
 
-DB_PATH = "/tmp/ago_memory.db"
+DB_PATH = "/tmp/ago_v21.db"
 OWNER_NUMBER = "573024929820"
 
 def get_user(phone):
@@ -12,7 +12,7 @@ def get_user(phone):
     row = cursor.fetchone()
     conn.close()
     if row: return {"name": row[0], "state": row[1], "last_results": json.loads(row[2]) if row[2] else [], "last_property": row[3], "last_type_desc": row[4]}
-    return {"name": None, "state": "new", "last_results": [], "last_type_desc": None}
+    return {"name": None, "state": "new", "last_results": [], "last_property": None, "last_type_desc": None}
 
 def update_user(phone, **kwargs):
     user = get_user(phone)
@@ -38,57 +38,28 @@ def process_message(phone, message):
 
     name = user["name"]
 
-    # --- LÓGICA DE REQUISITOS (V1.20 - COMPLETA) ---
+    # 1. REQUISITOS (DIFERENCIADOS)
     if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento']):
         type_desc = (user["last_type_desc"] or "").lower()
-        is_apartaestudio = "estudio" in type_desc or "estudio" in msg
-        
-        if is_apartaestudio:
-            return f"""✅ *Requisitos para Apartaestudio (Proceso Directo):*
-
-Para el arrendatario y el codeudor, se solicita:
-1️⃣ *Cédula de ciudadanía* (ampliada al 150%).
-2️⃣ *Soporte de ingresos* (Extractos bancarios últimos 3 meses o Carta Laboral).
-3️⃣ *Referencias* (1 Familiar y 1 Personal).
-
-Adicionalmente:
-4️⃣ *Depósito de provisión de servicios:* $150.000 (pago único inicial).
-
-⚠️ *Importante:* Primero recibimos y verificamos toda la documentación. Una vez aprobada, procedemos con la firma del contrato.
-
-*{name}*, puedes enviar los documentos por este medio en PDF o fotos nítidas para iniciar el proceso. 📝✨"""
-
+        if "estudio" in type_desc or "aparta" in msg:
+            return f"✅ *Requisitos para Apartaestudio (Proceso Directo):*\n\n1️⃣ Cédula al 150%.\n2️⃣ Extractos bancarios (3 meses) o Carta Laboral.\n3️⃣ Referencias (1 Familiar y 1 Personal).\n4️⃣ Depósito de servicios: $150.000.\n\n⚠️ *Nota:* Primero verificamos documentos, luego firmamos contrato. *{name}*, puedes enviarlos por aquí mismo. 📝"
         else:
-            papeleo = f"""✅ *Requisitos para Apartamentos:*
-Para estas propiedades el estudio se realiza con aseguradora. Necesitas:
-- Fotocopia de la *Cédula* al 150%.
-- *Carta Laboral* y *Extractos bancarios* (últimos 3 meses).
-- *Codeudor* solvente con la misma documentación."""
-
-            tramite = f"""📄 *¡Aplica ahora mismo!*
-Debes realizar el estudio con **El Libertador** aquí:
-👉 https://www.ellibertador.co/
-
-🏢 *Datos para el formulario:*
-- Código Inmobiliaria: *16004*
-- Nombre: *AGO GRUPO INMOBILIARIO*
-- Asesor: *Diego Ramirez*
-- Correo: *notificaciones@agoinmo.com*"""
-            
+            papeleo = f"✅ *Requisitos para Apartamentos:*\n- Cédula al 150%.\n- Carta Laboral y Extractos (3 meses).\n- Codeudor solvente con la misma documentación."
+            tramite = f"📄 *¡Aplica ahora mismo!*\n\nRealiza el estudio con **El Libertador** aquí:\n👉 https://www.ellibertador.co/\n\n🏢 *Datos:* 16004 | AGO GRUPO INMOBILIARIO | Asesor: Diego Ramirez | notificaciones@agoinmo.com"
             return [papeleo, tramite]
 
-    # --- DESPEDIDA ---
-    if any(k in msg for k in ['gracias', 'ya agende', 'agendado', 'adiós']):
-        return f"¡Con todo el gusto, *{name}*! 😊 Me alegra haberte ayudado. ¡Que tengas un excelente día! 🏠✨"
+    # 2. DESPEDIDA
+    if any(k in msg for k in ['gracias', 'ya agende', 'adiós', 'listo']):
+        return f"¡Con todo el gusto, *{name}*! 😊 ¡Que tengas un excelente día! 🏠✨"
 
-    # --- REDIRECCIÓN AL ASESOR ---
-    if any(k in msg for k in ['asesor', 'persona', 'humano']):
+    # 3. REDIRECCIÓN
+    if any(k in msg for k in ['asesor', 'persona', 'humano', 'hablar']):
         desc = user["last_type_desc"] or "un inmueble"
-        text = f"Hola, soy {name}. Estoy interesado en {desc} y quiero hablar con un asesor."
-        link = f"https://wa.me/{OWNER_NUMBER}?text={text.replace(' ', '%20')}"
+        text = f"Hola, soy {name}. Interesado en {desc} y quiero hablar con un asesor."
+        link = f"https://wa.me/573024929820?text={text.replace(' ', '%20')}"
         return f"¡Claro, *{name}*! 📱 Haz clic aquí para hablar directamente con Diego Ramirez:\n👉 {link}"
 
-    # --- BÚSQUEDA Y MENÚS ---
+    # 4. BÚSQUEDA
     if msg.isdigit():
         val = int(msg)
         if user["last_results"] and 1 <= val <= len(user["last_results"]):
