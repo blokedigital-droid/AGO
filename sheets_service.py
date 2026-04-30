@@ -30,6 +30,7 @@ def filter_properties(query):
 
 def search_properties(query):
     available = get_available_properties()
+    if not available: return []
     q = query.lower().strip()
     if len(q) < 3 and not q.isdigit(): return []
     scored = []
@@ -45,21 +46,37 @@ def search_properties(query):
     return [item[1] for item in scored]
 
 def format_property_response(prop, name=""):
-    res = f"¡Excelente elección, *{name}*! Aquí tienes el detalle: 🏠✨\n\n"
+    res = f"¡Excelente elección, *{name}*! Aquí tienes el detalle completo: 🏠✨\n\n"
     res += f"📌 *{prop.get('Tipo', 'Inmueble')}* ({prop.get('ID', '')})\n"
     res += f"📍 {prop.get('Ubicacion', 'Consultar')}\n"
     res += f"🏙️ *{prop.get('Ciudad', '')}*\n\n"
     res += f"💰 *CANON:* {prop.get('Precio', 'Consultar')}\n"
-    res += f"📐 {prop.get('Area_m2', 'N/A')} m² | 🛏 {prop.get('Habitaciones', 'N/A')} Hab\n"
-    if prop.get('Link_Fotos'): res += f"\n📸 *FOTOS:* {prop.get('Link_Fotos')}"
-    if prop.get('Link_Video'): res += f"\n🎥 *VIDEO:* {prop.get('Link_Video')}"
-    res += f"\n\n📅 *AGÉNDATE AQUÍ:* \n{prop.get('Link_agenamiento', 'https://wa.me/573024929820')}"
+    
+    # Detalles técnicos ampliados
+    detalles = []
+    if prop.get('Area_m2'): detalles.append(f"📐 {prop.get('Area_m2')} m²")
+    if prop.get('Habitaciones'): detalles.append(f"🛏 {prop.get('Habitaciones')} Hab")
+    if prop.get('Baños'): detalles.append(f"🚿 {prop.get('Baños')} Baños")
+    if prop.get('Parqueaderos') and prop.get('Parqueaderos') != '0': 
+        detalles.append(f"🅿️ {prop.get('Parqueaderos')} ({prop.get('Tipo_parqueadero', '')})")
+    
+    res += " | ".join(detalles) + "\n\n"
+    
+    # Descripción Completa (Sin recortes)
+    desc = prop.get('Descripcion_Plus', '').strip()
+    if desc:
+        res += f"📝 *Descripción:* \n{desc}\n\n"
+    
+    if prop.get('Link_Fotos'): res += f"📸 *FOTOS:* {prop.get('Link_Fotos')}\n"
+    if prop.get('Link_Video'): res += f"🎥 *VIDEO:* {prop.get('Link_Video')}\n"
+    
+    res += f"\n📅 *AGÉNDATE AQUÍ:* \n{prop.get('Link_agenamiento', 'https://wa.me/573024929820')}"
     res += f"\n\n*¿Lograste agendar o prefieres hablar con un asesor?* 😊"
     return res
 
 def format_property_list(props, name, context=""):
     res = f"¡Claro, *{name}*! Encontré estas opciones {context}: 🏠✨\n"
     for i, p in enumerate(props, 1):
-        res += f"\n*{i}. {p.get('Tipo','')}* ({p.get('ID','')})\n💰 {p.get('Precio','')}\n"
+        res += f"\n*{i}. {p.get('Tipo','')}* en {p.get('Ciudad','')} ({p.get('ID','')})\n💰 {p.get('Precio','')}\n"
     res += "\n¿Cuál de estos te interesa conocer? Escribe solo el *número*. 🎯"
     return res
