@@ -38,26 +38,30 @@ def process_message(phone, message):
 
     name = user["name"]
 
-    # 1. DESPEDIDA (Si dice gracias o ya agendó)
+    # 1. DESPEDIDA
     exit_words = ['gracias', 'agende', 'agendé', 'listo', 'adios', 'adiós', 'amable', 'encontré']
     if any(k in msg for k in exit_words) and len(msg.split()) <= 6:
         return f"¡Con todo el gusto, *{name}*! 😊 Me alegra mucho haberte ayudado. ¡Cualquier otra cosa que necesites, aquí estaré! ¡Que tengas un excelente día! 🏠✨"
 
-    # 2. REQUISITOS Y ESTUDIO (Doble Mensaje)
+    # 2. REQUISITOS Y TRÁMITE (DATOS CORREGIDOS)
     if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento', 'que piden']):
-        is_aparta = "aparta" in (user["last_type_desc"] or "").lower() or "aparta" in msg
-        if is_aparta:
-            papeleo = f"✅ *Requisitos para Apartaestudios:*\n- Fotocopia de Cédula.\n- Depósito de $150.000.\n- Contrato flexible (6-12 meses)."
-        else:
-            papeleo = f"✅ *Requisitos para Apartamentos:*\n- Fotocopia de Cédula.\n- Carta Laboral y Extractos (3 meses).\n- Codeudor con ingresos dobles al canon."
+        # Mejoramos la detección: si dice 'estudio' o el inmueble anterior era apartaestudio
+        type_desc = (user["last_type_desc"] or "").lower()
+        is_apartaestudio = "estudio" in type_desc or "estudio" in msg
         
-        tramite = f"📄 *¡Toma ventaja y aplica de una vez!*\n\nRealiza el estudio con **El Libertador** aquí:\n👉 https://www.ellibertador.co/\n\n🏢 *Datos:* AGO-2026 | Grupo Inmobiliario S.A.S"
-        return [papeleo, tramite]
+        if is_apartaestudio:
+            papeleo = f"✅ *Requisitos para Apartaestudios:*\n- Fotocopia de Cédula.\n- Depósito de provisión de servicios ($150.000).\n- Contrato a 6 o 12 meses."
+        else:
+            papeleo = f"✅ *Requisitos para Apartamentos:*\n- Fotocopia de Cédula.\n- Carta Laboral y Extractos (últimos 3 meses).\n- Codeudor con ingresos dobles al canon."
+        
+        msg2 = f"📄 *¡Toma ventaja y aplica de una vez!*\n\nRealiza el estudio con **El Libertador** aquí:\n👉 https://www.ellibertador.co/\n\n🏢 *Datos para el formulario:*\n- Código Inmobiliaria: *16004*\n- Nombre: *AGO GRUPO INMOBILIARIO*\n- Asesor: *Diego Ramirez*\n- Correo: *notificaciones@agoinmo.com*"
+        
+        return [papeleo, msg2]
 
-    # 3. ASESOR (Con resumen)
+    # 3. ASESOR
     if any(k in msg for k in ['asesor', 'persona', 'humano', 'hablar']):
         inmueble = user["last_type_desc"] or "un inmueble de interés"
-        text = f"Hola, soy {name}. Interesado en {inmueble} y quiero hablar con un asesor."
+        text = f"Hola, soy {name}. Estoy interesado en {inmueble} y quiero hablar con un asesor."
         link = f"https://wa.me/{OWNER_NUMBER}?text={text.replace(' ', '%20')}"
         return f"¡Claro, *{name}*! 📱 He preparado un resumen para el asesor. Haz clic aquí para hablar directamente con él:\n👉 {link}"
 
@@ -83,4 +87,4 @@ def process_message(phone, message):
         update_user(phone, last_results=results)
         return format_property_list(results, name, "que coinciden")
 
-    return f"*{name}*, no logré encontrar algo exacto. 🔍 ¿Buscas apartamentos o apartaestudios? 🏠"
+    return f"*{name}*, no logré encontrar algo exacto. ¿Buscas apartamentos o apartaestudios? 🏠"
