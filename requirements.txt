@@ -1,4 +1,5 @@
 flask
 requests
 thefuzz
+python-dotenv
 gunicorn
