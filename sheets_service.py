@@ -30,9 +30,8 @@ def filter_properties(query):
 
 def search_properties(query):
     available = get_available_properties()
-    if not available: return []
     q = query.lower().strip()
-    if len(q) < 3 and not q.isdigit(): return [] # Evita búsquedas basura
+    if len(q) < 3 and not q.isdigit(): return []
     scored = []
     for prop in available:
         score = 0
@@ -61,6 +60,6 @@ def format_property_response(prop, name=""):
 def format_property_list(props, name, context=""):
     res = f"¡Claro, *{name}*! Encontré estas opciones {context}: 🏠✨\n"
     for i, p in enumerate(props, 1):
-        res += f"\n*{i}. {p.get('Tipo','')}* en {p.get('Ciudad','')} ({p.get('ID','')})\n💰 {p.get('Precio','')}\n"
+        res += f"\n*{i}. {p.get('Tipo','')}* ({p.get('ID','')})\n💰 {p.get('Precio','')}\n"
     res += "\n¿Cuál de estos te interesa conocer? Escribe solo el *número*. 🎯"
     return res
