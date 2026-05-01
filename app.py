@@ -46,12 +46,14 @@ def health(): return jsonify({"status": "alive"}), 200
 @app.route('/dashboard', methods=['GET'])
 def dashboard():
     if request.args.get('key') != "ago2026": return "Acceso Denegado", 403
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM chat_history ORDER BY timestamp DESC LIMIT 100")
-    chats = cursor.fetchall()
-    conn.close()
-    return render_template_string(HTML_TEMPLATE, chats=chats)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM chat_history ORDER BY timestamp DESC LIMIT 100")
+        chats = cursor.fetchall()
+        conn.close()
+        return render_template_string(HTML_TEMPLATE, chats=chats)
+    except: return "No hay chats registrados aún."
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
@@ -71,7 +73,7 @@ def handle_webhook():
                 responses = process_message(phone, text)
                 if isinstance(responses, list):
                     for i, resp in enumerate(responses):
-                        send_text_message(phone, resp); time.sleep(3)
+                        send_text_message(phone, resp); time.sleep(2)
                 else: send_text_message(phone, responses)
     except: pass
     return jsonify({"status": "ok"}), 200
