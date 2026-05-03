@@ -1,4 +1,4 @@
-import os, json, time, sqlite3
+import os, json, time, sqlite3, threading
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 from bot_logic import process_message, DB_PATH
@@ -7,6 +7,7 @@ from whatsapp_service import send_text_message
 load_dotenv()
 app = Flask(__name__)
 
+# --- DASHBOARD HTML (NUEVO DISEÑO CON MENÚ) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -14,55 +15,81 @@ HTML_TEMPLATE = """
     <title>AGO - Monitor de Chats</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        h2 { color: #1c1e21; border-bottom: 2px solid #075e54; padding-bottom: 10px; text-align: center; }
-        .chat-box { border-bottom: 1px solid #eee; padding: 15px 0; }
-        .sender { font-weight: bold; font-size: 1.1em; }
-        .Cliente { color: #25d366; }
-        .AGO { color: #34b7f1; }
-        .time { font-size: 0.8em; color: #888; float: right; }
-        .msg { margin-top: 8px; white-space: pre-wrap; line-height: 1.4; color: #444; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; display: flex; height: 100vh; }
+        .sidebar { width: 300px; background: #075e54; color: white; overflow-y: auto; padding: 15px; }
+        .client-link { display: block; padding: 15px; color: white; text-decoration: none; border-bottom: 1px solid #ffffff11; border-radius: 5px; margin-bottom: 5px; }
+        .client-link:hover { background: #128c7e; }
+        .client-link.active { background: #25d366; font-weight: bold; }
+        .main { flex-grow: 1; display: flex; flex-direction: column; background: #e5ddd5; }
+        .chat-box { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
+        .msg { margin-bottom: 10px; padding: 10px 15px; border-radius: 10px; max-width: 70%; line-height: 1.4; position: relative; }
+        .msg-AGO { align-self: flex-start; background: white; color: #333; }
+        .msg-Cliente { align-self: flex-end; background: #dcf8c6; color: #333; }
+        .time { font-size: 0.7em; color: #888; display: block; text-align: right; margin-top: 5px; }
+        .header { background: #075e54; color: white; padding: 15px; text-align: center; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>🏠 AGO - Monitor de Ventas 🤖</h2>
-        {% for chat in chats %}
-        <div class="chat-box">
-            <span class="time">{{ chat[4] }}</span>
-            <span class="sender {{ chat[2] }}">{{ chat[2] }} ({{ chat[1] }}):</span>
-            <div class="msg">{{ chat[3] }}</div>
-        </div>
+    <div class="sidebar">
+        <h3>🏠 Clientes</h3>
+        {% for phone in clients %}
+        <a href="/dashboard?key=ago2026&phone={{ phone }}" class="client-link {% if phone == selected_phone %}active{% endif %}">
+            📱 {{ phone }}
+        </a>
         {% endfor %}
+    </div>
+    <div class="main">
+        <div class="header">{% if selected_phone %} Chat con {{ selected_phone }} {% else %} AGO Monitor Inmobiliario {% endif %}</div>
+        <div class="chat-box">
+            {% for chat in chats %}
+            <div class="msg msg-{{ chat[2] }}">
+                <div style="white-space: pre-wrap;">{{ chat[3] }}</div>
+                <span class="time">{{ chat[4] }}</span>
+            </div>
+            {% endfor %}
+        </div>
     </div>
 </body>
 </html>
 """
 
-@app.route('/health', methods=['GET'])
-def health(): return jsonify({"status": "alive"}), 200
+@app.route('/health')
+def health(): return jsonify({"status": "alive", "version": "1.22"}), 200
 
-@app.route('/dashboard', methods=['GET'])
+@app.route('/dashboard')
 def dashboard():
     if request.args.get('key') != "ago2026": return "Acceso Denegado", 403
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM chat_history ORDER BY timestamp DESC LIMIT 100")
+    selected_phone = request.args.get('phone')
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT phone FROM chat_history ORDER BY timestamp DESC")
+    clients = [row[0] for row in cursor.fetchall()]
+    chats = []
+    if selected_phone:
+        cursor.execute("SELECT * FROM chat_history WHERE phone = ? ORDER BY timestamp ASC", (selected_phone,))
         chats = cursor.fetchall()
-        conn.close()
-        return render_template_string(HTML_TEMPLATE, chats=chats)
-    except: return "No hay chats registrados aún."
+    conn.close()
+    return render_template_string(HTML_TEMPLATE, clients=clients, chats=chats, selected_phone=selected_phone)
 
-@app.route('/webhook', methods=['GET'])
-def verify_webhook():
-    if request.args.get("hub.verify_token") == os.getenv('WHATSAPP_VERIFY_TOKEN'):
-        return request.args.get("hub.challenge"), 200
-    return 'Forbidden', 403
+message_buffer = {}
 
-@app.route('/webhook', methods=['POST'])
+def process_and_send(phone):
+    time.sleep(8) # ESPERA DE 8 SEGUNDOS
+    if phone in message_buffer:
+        full_text = " ".join(message_buffer[phone])
+        del message_buffer[phone]
+        responses = process_message(phone, full_text)
+        if isinstance(responses, list):
+            for r in responses: send_text_message(phone, r); time.sleep(2)
+        else: send_text_message(phone, responses)
+
+@app.route('/webhook', methods=['GET', 'POST'])
 def handle_webhook():
+    if request.method == 'GET':
+        if request.args.get("hub.verify_token") == os.getenv('WHATSAPP_VERIFY_TOKEN'):
+            return request.args.get("hub.challenge"), 200
+        return 'Forbidden', 403
+    
     body = request.get_json()
     try:
         if body.get('entry', [{}])[0].get('changes', [{}])[0].get('value', {}).get('messages'):
@@ -70,11 +97,10 @@ def handle_webhook():
             phone = message['from']
             text = message.get('text', {}).get('body', '').strip()
             if text:
-                responses = process_message(phone, text)
-                if isinstance(responses, list):
-                    for i, resp in enumerate(responses):
-                        send_text_message(phone, resp); time.sleep(2)
-                else: send_text_message(phone, responses)
+                if phone not in message_buffer:
+                    message_buffer[phone] = [text]
+                    threading.Thread(target=process_and_send, args=(phone,)).start()
+                else: message_buffer[phone].append(text)
     except: pass
     return jsonify({"status": "ok"}), 200
 
