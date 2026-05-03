@@ -16,27 +16,19 @@ def get_available_properties():
     return [p for p in fetch_all_properties() if p.get('Estado', '').strip().lower() in ['', 'disponible']]
 
 def filter_properties(query):
-    available = get_available_properties()
-    q = query.lower().strip()
-    if q in ['apartamento', 'apartamentos']:
-        return [p for p in available if 'apartamento' in p.get('Tipo','').lower() and 'apartaestudio' not in p.get('Tipo','').lower()]
-    if q in ['apartaestudio', 'apartaestudios', 'estudio']:
-        return [p for p in available if 'apartaestudio' in p.get('Tipo','').lower()]
-    if q in ['cali']:
-        return [p for p in available if 'cali' in p.get('Ciudad','').lower()]
-    if q in ['jamundi', 'jamundí']:
-        return [p for p in available if 'jamundi' in p.get('Ciudad','').lower()]
+    available = get_available_properties(); q = query.lower().strip()
+    if q in ['apartamento', 'apartamentos']: return [p for p in available if 'apartamento' in p.get('Tipo','').lower() and 'apartaestudio' not in p.get('Tipo','').lower()]
+    if q in ['apartaestudio', 'apartaestudios', 'estudio']: return [p for p in available if 'apartaestudio' in p.get('Tipo','').lower()]
+    if q in ['cali']: return [p for p in available if 'cali' in p.get('Ciudad','').lower()]
+    if q in ['jamundi', 'jamundí']: return [p for p in available if 'jamundi' in p.get('Ciudad','').lower()]
     return []
 
 def search_properties(query):
-    available = get_available_properties()
-    if not available: return []
-    q = query.lower().strip()
+    available = get_available_properties(); q = query.lower().strip()
     if len(q) < 3 and not q.isdigit(): return []
     scored = []
     for prop in available:
-        score = 0
-        text = f"{prop.get('Tipo','')} {prop.get('Ubicacion','')} {prop.get('Ciudad','')} {prop.get('ID','')}".lower()
+        score = 0; text = f"{prop.get('Tipo','')} {prop.get('Ubicacion','')} {prop.get('Ciudad','')} {prop.get('ID','')}".lower()
         if q == prop.get('ID','').lower(): score += 100
         if q in text: score += 50
         ratio = fuzz.partial_ratio(q, text)
@@ -46,30 +38,22 @@ def search_properties(query):
     return [item[1] for item in scored]
 
 def format_property_response(prop, name=""):
-    res = f"¡Excelente elección, *{name}*! Aquí tienes el detalle completo: 🏠✨\n\n"
+    res = f"¡Excelente elección, *{name}*! Aquí tienes el detalle: 🏠✨\n\n"
     res += f"📌 *{prop.get('Tipo', 'Inmueble')}* ({prop.get('ID', '')})\n"
     res += f"📍 {prop.get('Ubicacion', 'Consultar')}\n"
     res += f"🏙️ *{prop.get('Ciudad', '')}*\n\n"
     res += f"💰 *CANON:* {prop.get('Precio', 'Consultar')}\n"
     
-    # Detalles técnicos ampliados
     detalles = []
     if prop.get('Area_m2'): detalles.append(f"📐 {prop.get('Area_m2')} m²")
     if prop.get('Habitaciones'): detalles.append(f"🛏 {prop.get('Habitaciones')} Hab")
     if prop.get('Baños'): detalles.append(f"🚿 {prop.get('Baños')} Baños")
-    if prop.get('Parqueaderos') and prop.get('Parqueaderos') != '0': 
-        detalles.append(f"🅿️ {prop.get('Parqueaderos')} ({prop.get('Tipo_parqueadero', '')})")
-    
     res += " | ".join(detalles) + "\n\n"
     
-    # Descripción Completa (Sin recortes)
     desc = prop.get('Descripcion_Plus', '').strip()
-    if desc:
-        res += f"📝 *Descripción:* \n{desc}\n\n"
+    if desc: res += f"📝 *Descripción:* \n{desc}\n\n"
     
     if prop.get('Link_Fotos'): res += f"📸 *FOTOS:* {prop.get('Link_Fotos')}\n"
-    if prop.get('Link_Video'): res += f"🎥 *VIDEO:* {prop.get('Link_Video')}\n"
-    
     res += f"\n📅 *AGÉNDATE AQUÍ:* \n{prop.get('Link_agenamiento', 'https://wa.me/573024929820')}"
     res += f"\n\n*¿Lograste agendar o prefieres hablar con un asesor?* 😊"
     return res
