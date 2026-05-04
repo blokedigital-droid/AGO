@@ -1,16 +1,21 @@
 import sqlite3, json, datetime, time
 from sheets_service import search_properties, format_property_response, format_property_list, filter_properties, fetch_all_properties
 
-DB_PATH = "/tmp/ago_v26.db"
+# RUTA DEFINITIVA PARA MEMORIA ETERNA (Usando el Volumen de Railway)
+DB_PATH = "/app/data/ago_final.db"
 OWNER_NUMBER = "573024929820"
 
-def get_db_connection(): return sqlite3.connect(DB_PATH, timeout=10)
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH, timeout=20)
+    return conn
 
 def init_db():
-    conn = get_db_connection()
-    conn.execute("CREATE TABLE IF NOT EXISTS users (phone TEXT PRIMARY KEY, name TEXT, state TEXT, last_results TEXT, last_property_id TEXT, last_type_desc TEXT)")
-    conn.execute("CREATE TABLE IF NOT EXISTS chat_history (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT, sender TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
-    conn.commit(); conn.close()
+    try:
+        conn = get_db_connection()
+        conn.execute("CREATE TABLE IF NOT EXISTS users (phone TEXT PRIMARY KEY, name TEXT, state TEXT, last_results TEXT, last_property_id TEXT, last_type_desc TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS chat_history (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT, sender TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        conn.commit(); conn.close()
+    except Exception as e: print(f"Error Init DB: {e}")
 
 init_db()
 
@@ -50,7 +55,7 @@ def process_message(phone, message):
         name = extract_name(message)
         if name:
             update_user(phone, name=name, state="ready")
-            res = [f"¡Hola! Soy *AGO*, tu asistente del Grupo Inmobiliario. 🏠✨", f"¡Qué buen nombre, *{name}*! Te ayudaré a encontrar tu hogar ideal hoy mismo.", "¿Por dónde empezamos? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"]
+            res = [f"¡Hola! Soy *AGO*, tu asistente personal. 🏠✨", f"¡Qué buen nombre, *{name}*! Te ayudaré a encontrar tu hogar ideal hoy mismo.", "¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *Opciones en Cali*\n4. *Opciones en Jamundí*"]
         else:
             update_user(phone, state="awaiting_name")
             res = "¡Hola! Soy *AGO*, te ayudaré a encontrar tu próximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar hoy? 😊"
@@ -58,7 +63,7 @@ def process_message(phone, message):
     elif user["state"] == "awaiting_name":
         name = message.strip().title()
         update_user(phone, name=name, state="ready")
-        res = f"¡Un placer saludarte, *{name}*! 🤝 Ya tengo todo listo para mostrarte lo mejor que tenemos.\n\n¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
+        res = f"¡Un placer saludarte, *{name}*! 🤝 ¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
     
     else:
         name = user["name"] or "Amigo"
@@ -78,7 +83,7 @@ def process_message(phone, message):
         elif any(k in msg for k in ['asesor', 'persona', 'humano', 'hablar']):
             text = f"Hola, soy {name}. Interesado en {user['last_type_desc'] or 'un inmueble'}"
             link = f"https://wa.me/573024929820?text={text.replace(' ', '%20')}"
-            res = f"¡Excelente decisión, *{name}*! 📱 Haz clic aquí para hablar con Diego Ramirez:\n👉 {link}"
+            res = f"¡Excelente decisión, *{name}*! 📱 Te paso con Diego Ramirez para cerrar los detalles. Haz clic aquí:\n👉 {link}"
         elif msg.isdigit():
             val = int(msg)
             if user["last_results"] and 1 <= val <= len(user["last_results"]):
@@ -99,15 +104,18 @@ def process_message(phone, message):
                 update_user(phone, last_results=results); res = format_property_list(results, name, "que coinciden")
             else: res = f"¡Ups, *{name}*! 🔍 No encontré algo exacto. ¿Buscas apartamentos o apartaestudios? 🏠"
     
-    if isinstance(res, list):
-        for r in res: save_chat(phone, "AGO", r)
-    else: save_chat(phone, "AGO", res)
-    return res
+    return handle_and_save(phone, res)
+
+def handle_and_save(phone, response):
+    if isinstance(response, list):
+        for r in response: save_chat(phone, "AGO", r)
+    else: save_chat(phone, "AGO", response)
+    return response
 
 def handle_property_response(prop, name):
     main_text = format_property_response(prop, name)
     video_url = prop.get('Link_Video', '').strip()
-    if video_url: return [main_text, video_url] # LINK COMPLETAMENTE SOLO PARA MINIATURA
+    if video_url: return [main_text, video_url] # LINK SOLITARIO PARA MINIATURA
     return main_text
 
 def extract_name(text):
