@@ -1,7 +1,7 @@
 import sqlite3, json, datetime, time
 from sheets_service import search_properties, format_property_response, format_property_list, filter_properties, fetch_all_properties
 
-DB_PATH = "/tmp/ago_v27.db"
+DB_PATH = "/tmp/ago_v26.db"
 OWNER_NUMBER = "573024929820"
 
 def get_db_connection(): return sqlite3.connect(DB_PATH, timeout=10)
@@ -50,7 +50,7 @@ def process_message(phone, message):
         name = extract_name(message)
         if name:
             update_user(phone, name=name, state="ready")
-            res = [f"¡Hola! Soy *AGO*, tu asistente personal. 🏠✨", f"¡Qué buen nombre, *{name}*! Te ayudaré a encontrar tu próximo hogar hoy mismo.", "¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"]
+            res = [f"¡Hola! Soy *AGO*, tu asistente del Grupo Inmobiliario. 🏠✨", f"¡Qué buen nombre, *{name}*! Te ayudaré a encontrar tu hogar ideal hoy mismo.", "¿Por dónde empezamos? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"]
         else:
             update_user(phone, state="awaiting_name")
             res = "¡Hola! Soy *AGO*, te ayudaré a encontrar tu próximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar hoy? 😊"
@@ -58,27 +58,27 @@ def process_message(phone, message):
     elif user["state"] == "awaiting_name":
         name = message.strip().title()
         update_user(phone, name=name, state="ready")
-        res = f"¡Un placer saludarte, *{name}*! 🤝 ¿Qué tipo de hogar buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
+        res = f"¡Un placer saludarte, *{name}*! 🤝 Ya tengo todo listo para mostrarte lo mejor que tenemos.\n\n¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
     
     else:
         name = user["name"] or "Amigo"
-        if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento']):
+        if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento', 'que piden']):
             props = fetch_all_properties(); target = None
             if user["last_property_id"]:
                 for p in props:
                     if p.get('ID') == user["last_property_id"]: target = p; break
             if target:
-                reqs = target.get('Requisitos', '').strip() or "Por favor contáctame para los detalles exactos. 😊"
+                reqs = target.get('Requisitos', '').strip() or "Contáctame para los detalles exactos. 😊"
                 res = [f"📋 *Requisitos para:* {target.get('Tipo','Inmueble')} ({target.get('ID','')})", reqs]
                 if "apartaestudio" not in target.get('Tipo','').lower():
                     res.append(f"📄 *Estudio El Libertador:* https://www.ellibertador.co/\n🏢 *Datos:* 16004 | Asesor: Diego Ramirez | notificaciones@agoinmo.com")
-            else: res = f"*{name}*, dime el código (ej: AGO007) para darte los requisitos exactos. 🏠"
+            else: res = f"*{name}*, dime el código para darte los requisitos exactos de esa propiedad. 🏠"
         elif any(k in msg for k in ['gracias', 'ya agende', 'adiós', 'listo', 'chau']):
             res = f"¡Con todo el gusto, *{name}*! 😊 ¡Que tengas un día maravilloso! 🏠✨"
         elif any(k in msg for k in ['asesor', 'persona', 'humano', 'hablar']):
             text = f"Hola, soy {name}. Interesado en {user['last_type_desc'] or 'un inmueble'}"
             link = f"https://wa.me/573024929820?text={text.replace(' ', '%20')}"
-            res = f"¡Excelente decisión, *{name}*! 📱 Te paso con Diego Ramirez para cerrar los detalles. Haz clic aquí:\n👉 {link}"
+            res = f"¡Excelente decisión, *{name}*! 📱 Haz clic aquí para hablar con Diego Ramirez:\n👉 {link}"
         elif msg.isdigit():
             val = int(msg)
             if user["last_results"] and 1 <= val <= len(user["last_results"]):
@@ -98,18 +98,16 @@ def process_message(phone, message):
             elif len(results) > 1:
                 update_user(phone, last_results=results); res = format_property_list(results, name, "que coinciden")
             else: res = f"¡Ups, *{name}*! 🔍 No encontré algo exacto. ¿Buscas apartamentos o apartaestudios? 🏠"
-    return handle_and_save(phone, res)
-
-def handle_and_save(phone, response):
-    if isinstance(response, list):
-        for r in response: save_chat(phone, "AGO", r)
-    else: save_chat(phone, "AGO", response)
-    return response
+    
+    if isinstance(res, list):
+        for r in res: save_chat(phone, "AGO", r)
+    else: save_chat(phone, "AGO", res)
+    return res
 
 def handle_property_response(prop, name):
     main_text = format_property_response(prop, name)
     video_url = prop.get('Link_Video', '').strip()
-    if video_url: return [main_text, video_url] # LINK COMPLETAMENTE SOLO PARA MINIATURA GIGANTE
+    if video_url: return [main_text, video_url] # LINK COMPLETAMENTE SOLO PARA MINIATURA
     return main_text
 
 def extract_name(text):
