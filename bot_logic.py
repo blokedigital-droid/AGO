@@ -1,11 +1,16 @@
-import sqlite3, json, datetime
+import sqlite3, json, datetime, time
 from sheets_service import search_properties, format_property_response, format_property_list, filter_properties, fetch_all_properties
 
-DB_PATH = "/tmp/ago_v25.db" # Cambiamos de DB para inicio limpio
+DB_PATH = "/tmp/ago_v26.db" # Nueva DB para limpieza
 OWNER_NUMBER = "573024929820"
 
+def get_db_connection():
+    # Esta función asegura que esperemos si la base de datos está ocupada
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    return conn
+
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     conn.execute("CREATE TABLE IF NOT EXISTS users (phone TEXT PRIMARY KEY, name TEXT, state TEXT, last_results TEXT, last_property_id TEXT, last_type_desc TEXT)")
     conn.execute("CREATE TABLE IF NOT EXISTS chat_history (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT, sender TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
     conn.commit(); conn.close()
@@ -14,26 +19,30 @@ init_db()
 
 def save_chat(phone, sender, message):
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db_connection()
         conn.execute("INSERT INTO chat_history (phone, sender, message) VALUES (?, ?, ?)", (phone, sender, str(message)))
         conn.commit(); conn.close()
     except: pass
 
 def get_user(phone):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, state, last_results, last_property_id, last_type_desc FROM users WHERE phone = ?", (phone,))
-    row = cursor.fetchone(); conn.close()
-    if row: return {"name": row[0], "state": row[1], "last_results": json.loads(row[2]) if row[2] else [], "last_property_id": row[3], "last_type_desc": row[4]}
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, state, last_results, last_property_id, last_type_desc FROM users WHERE phone = ?", (phone,))
+        row = cursor.fetchone(); conn.close()
+        if row: return {"name": row[0], "state": row[1], "last_results": json.loads(row[2]) if row[2] else [], "last_property_id": row[3], "last_type_desc": row[4]}
+    except: pass
     return {"name": None, "state": "new", "last_results": [], "last_property_id": None, "last_type_desc": None}
 
 def update_user(phone, **kwargs):
     user = get_user(phone)
     for key, value in kwargs.items(): user[key] = value
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("INSERT OR REPLACE INTO users (phone, name, state, last_results, last_property_id, last_type_desc) VALUES (?, ?, ?, ?, ?, ?)", 
-                 (phone, user["name"], user["state"], json.dumps(user["last_results"]), user["last_property_id"], user["last_type_desc"]))
-    conn.commit(); conn.close()
+    try:
+        conn = get_db_connection()
+        conn.execute("INSERT OR REPLACE INTO users (phone, name, state, last_results, last_property_id, last_type_desc) VALUES (?, ?, ?, ?, ?, ?)", 
+                     (phone, user["name"], user["state"], json.dumps(user["last_results"]), user["last_property_id"], user["last_type_desc"]))
+        conn.commit(); conn.close()
+    except: pass
 
 def process_message(phone, message):
     save_chat(phone, "Cliente", message)
@@ -41,24 +50,24 @@ def process_message(phone, message):
     msg = message.lower().strip()
     res = ""
 
-    # --- 1. DETECCIÓN DE NOMBRE (CORREGIDO EL BUCLE) ---
+    # --- 1. DETECCIÓN DE NOMBRE ---
     if user["state"] == "new":
         name = extract_name(message)
         if name:
             update_user(phone, name=name, state="ready")
-            return [f"¡Hola! Soy *AGO*, tu asistente del Grupo Inmobiliario. 🏠✨", f"¡Qué buen nombre, *{name}*! 🥳 Te ayudaré a encontrar tu hogar ideal hoy mismo.", "¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"]
+            return handle_and_save(phone, [f"¡Hola! Soy *AGO*, tu asistente del Grupo Inmobiliario. 🏠✨", f"¡Qué buen nombre, *{name}*! 🥳 Te ayudaré a encontrar tu hogar ideal hoy mismo.", "¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"])
         update_user(phone, state="awaiting_name")
-        return "¡Hola! Soy *AGO*, te voy a ayudar a encontrar tu próximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar hoy? 😊"
+        return handle_and_save(phone, "¡Hola! Soy *AGO*, te voy a ayudar a encontrar tu próximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar hoy? 😊")
     
     if user["state"] == "awaiting_name":
         name = extract_name(message) or message.strip().title()
         update_user(phone, name=name, state="ready")
-        return f"¡Un placer saludarte, *{name}*! 🤝 Ya tengo todo listo. ¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
+        return handle_and_save(phone, f"¡Un placer saludarte, *{name}*! 🤝 Ya tengo todo listo. ¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*")
 
     name = user["name"] or "Amigo"
 
-    # --- 2. REQUISITOS (ESPECÍFICOS DEL EXCEL) ---
-    if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento', 'que piden']):
+    # --- 2. REQUISITOS ---
+    if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento']):
         props = fetch_all_properties(); target = None
         if user["last_property_id"]:
             for p in props:
