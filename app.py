@@ -67,34 +67,39 @@ HTML_TEMPLATE = """
 """
 
 @app.route('/health')
-def health(): return jsonify({"status": "active", "version": "1.25"}), 200
+def health(): return jsonify({"status": "active", "version": "1.26"}), 200
 
 @app.route('/dashboard')
 def dashboard():
     if request.args.get('key') != "ago2026": return "Acceso Denegado", 403
     selected_phone = request.args.get('phone')
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT phone FROM chat_history ORDER BY timestamp DESC")
-    clients = [row[0] for row in cursor.fetchall()]
-    chats = []
-    if selected_phone:
-        cursor.execute("SELECT * FROM chat_history WHERE phone = ? ORDER BY timestamp ASC", (selected_phone,))
-        chats = cursor.fetchall()
-    conn.close()
-    return render_template_string(HTML_TEMPLATE, clients=clients, chats=chats, selected_phone=selected_phone)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT phone FROM chat_history ORDER BY timestamp DESC")
+        clients = [row[0] for row in cursor.fetchall()]
+        chats = []
+        if selected_phone:
+            cursor.execute("SELECT * FROM chat_history WHERE phone = ? ORDER BY timestamp ASC", (selected_phone,))
+            chats = cursor.fetchall()
+        conn.close()
+        return render_template_string(HTML_TEMPLATE, clients=clients, chats=chats, selected_phone=selected_phone)
+    except: return "Error cargando dashboard."
 
 message_buffer = {}
 
 def process_and_send(phone, is_initial):
-    time.sleep(5 if is_initial else 0.5) # SOLO 5s AL INICIO
-    if phone in message_buffer:
-        full_text = " ".join(message_buffer[phone])
-        del message_buffer[phone]
-        responses = process_message(phone, full_text)
-        if isinstance(responses, list):
-            for r in responses: send_text_message(phone, r); time.sleep(2)
-        else: send_text_message(phone, responses)
+    time.sleep(5 if is_initial else 0.5)
+    try:
+        if phone in message_buffer:
+            full_text = " ".join(message_buffer[phone])
+            del message_buffer[phone]
+            responses = process_message(phone, full_text)
+            if isinstance(responses, list):
+                for r in responses: send_text_message(phone, r); time.sleep(2)
+            else: send_text_message(phone, responses)
+    except Exception as e:
+        print(f"Error en hilo: {e}")
 
 @app.route('/webhook', methods=['GET', 'POST'])
 def handle_webhook():
