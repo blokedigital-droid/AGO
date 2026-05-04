@@ -1,12 +1,13 @@
 import os, json, time, sqlite3, threading
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
-from bot_logic import process_message, DB_PATH, get_user, save_chat, handle_and_save
+from bot_logic import process_message, DB_PATH, get_user, save_chat
 from whatsapp_service import send_text_message
 
 load_dotenv()
 app = Flask(__name__)
 
+# --- DASHBOARD HTML (CON BOTÓN DE RESCATE) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -15,24 +16,19 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         :root { --whatsapp-green: #075e54; --light-green: #dcf8c6; --bg-gray: #e5ddd5; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; display: flex; height: 100vh; flex-direction: row; }
-        .sidebar { width: 300px; background: var(--whatsapp-green); color: white; display: flex; flex-direction: column; transition: 0.3s; }
-        .sidebar-header { padding: 20px; background: #128c7e; text-align: center; font-weight: bold; font-size: 1.2em; border-bottom: 1px solid #ffffff22; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; display: flex; height: 100vh; }
+        .sidebar { width: 300px; background: var(--whatsapp-green); color: white; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; background: #128c7e; text-align: center; font-weight: bold; border-bottom: 1px solid #ffffff22; }
         .client-list { flex-grow: 1; overflow-y: auto; }
         .client-link { display: block; padding: 15px 20px; color: white; text-decoration: none; border-bottom: 1px solid #ffffff11; }
         .client-link.active { background: #25d366; border-left: 5px solid white; }
-        .main { flex-grow: 1; display: flex; flex-direction: column; background: var(--bg-gray); position: relative; }
-        .chat-header { background: var(--whatsapp-green); color: white; padding: 15px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 10; }
+        .main { flex-grow: 1; display: flex; flex-direction: column; background: var(--bg-gray); }
+        .chat-header { background: var(--whatsapp-green); color: white; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
         .chat-box { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
-        .msg { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; max-width: 85%; font-size: 0.95em; position: relative; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
-        .msg-AGO { align-self: flex-start; background: white; color: #333; }
-        .msg-Cliente { align-self: flex-end; background: var(--light-green); color: #333; }
-        .time { font-size: 0.65em; color: #999; display: block; text-align: right; margin-top: 4px; }
-        @media (max-width: 768px) {
-            body { flex-direction: column; }
-            .sidebar { width: 100%; height: 30vh; }
-            .main { height: 70vh; }
-        }
+        .msg { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; max-width: 85%; font-size: 0.95em; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        .msg-AGO { align-self: flex-start; background: white; }
+        .msg-Cliente { align-self: flex-end; background: var(--light-green); }
+        .btn-rescue { background: #ff5722; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; text-decoration: none; font-size: 0.8em; }
     </style>
 </head>
 <body>
@@ -45,20 +41,45 @@ HTML_TEMPLATE = """
         </div>
     </div>
     <div class="main">
-        {% if selected_phone %}
-        <div class="chat-header">Conversación con {{ selected_phone }}</div>
+        <div class="chat-header">
+            <span>{% if selected_phone %} Chat: {{ selected_phone }} {% else %} Monitor AGO {% endif %}</span>
+            <a href="/rescue?key=ago2026" class="btn-rescue" onclick="return confirm('¿Quieres enviar un mensaje de seguimiento a los clientes no contactados?')">🚀 Rescatar Chats</a>
+        </div>
         <div class="chat-box">
             {% for chat in chats %}
-            <div class="msg msg-{{ chat[2] }}"><div style="white-space: pre-wrap;">{{ chat[3] }}</div><span class="time">{{ chat[4] }}</span></div>
+            <div class="msg msg-{{ chat[2] }}"><div>{{ chat[3] }}</div><small style="color:#999;font-size:0.7em;">{{ chat[4] }}</small></div>
             {% endfor %}
         </div>
-        {% else %}
-        <div style="display:flex; align-items:center; justify-content:center; height:100%; color:#888;"><h3>Selecciona un cliente</h3></div>
-        {% endif %}
     </div>
 </body>
 </html>
 """
+
+@app.route('/rescue')
+def rescue_chats():
+    if request.args.get('key') != "ago2026": return "Denegado", 403
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        # Buscamos números donde el último mensaje NO fue de AGO
+        cursor.execute('''
+            SELECT phone FROM chat_history 
+            GROUP BY phone 
+            HAVING id = MAX(id) AND sender = 'Cliente'
+            LIMIT 5
+        ''')
+        unanswered = cursor.fetchall()
+        count = 0
+        for row in unanswered:
+            phone = row[0]
+            msg = "¡Hola! Soy *AGO* de la inmobiliaria. 👋 Mil disculpas, tuvimos un pequeño problema técnico y no pudimos responderte a tiempo. 🏠✨\n\nYa estoy aquí de nuevo, ¿en qué te puedo ayudar hoy?"
+            send_text_message(phone, msg)
+            save_chat(phone, "AGO", msg)
+            count += 1
+            time.sleep(2)
+        conn.close()
+        return f"Éxito: Se contactaron {count} clientes olvidados. 🎉"
+    except Exception as e: return f"Error: {e}"
 
 @app.route('/dashboard')
 def dashboard():
@@ -78,7 +99,7 @@ def dashboard():
 message_buffer = {}
 
 def process_and_send(phone, is_initial):
-    time.sleep(5 if is_initial else 0.5)
+    time.sleep(5 if is_initial else 0.5) # 5s SOLO AL INICIO
     if phone in message_buffer:
         full_text = " ".join(message_buffer[phone])
         del message_buffer[phone]
@@ -96,8 +117,8 @@ def handle_webhook():
     body = request.get_json()
     try:
         if body.get('entry', [{}])[0].get('changes', [{}])[0].get('value', {}).get('messages'):
-            message = body['entry'][0]['changes'][0]['value']['messages'][0]
-            phone, text = message['from'], message.get('text', {}).get('body', '').strip()
+            msg = body['entry'][0]['changes'][0]['value']['messages'][0]
+            phone, text = msg['from'], msg.get('text', {}).get('body', '').strip()
             if text:
                 user = get_user(phone)
                 is_initial = (user["state"] == "new")
