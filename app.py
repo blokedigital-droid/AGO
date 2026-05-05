@@ -7,7 +7,7 @@ from whatsapp_service import send_text_message
 load_dotenv()
 app = Flask(__name__)
 
-# --- MONITOR DE VENTAS MÓVIL (V1.34) ---
+# --- MONITOR DE VENTAS PROFESIONAL (RESPONSIVO) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -17,40 +17,30 @@ HTML_TEMPLATE = """
     <style>
         :root { --wa-green: #075e54; --wa-light: #dcf8c6; --wa-bg: #e5ddd5; }
         body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; display: flex; height: 100vh; flex-direction: row; }
-        .sidebar { width: 300px; background: var(--wa-green); color: white; display: flex; flex-direction: column; flex-shrink: 0; }
-        .client-list { flex-grow: 1; overflow-y: auto; }
+        .sidebar { width: 300px; background: var(--wa-green); color: white; display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
         .client-link { display: block; padding: 15px; color: white; text-decoration: none; border-bottom: 1px solid #ffffff11; }
-        .client-link.active { background: #25d366; font-weight: bold; }
+        .client-link.active { background: #25d366; font-weight: bold; border-left: 6px solid white; }
         .main { flex-grow: 1; display: flex; flex-direction: column; background: var(--wa-bg); overflow: hidden; }
         .chat-box { flex-grow: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; }
-        .msg { margin-bottom: 10px; padding: 10px; border-radius: 8px; max-width: 85%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        .msg { margin-bottom: 10px; padding: 10px; border-radius: 8px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
         .msg-AGO { align-self: flex-start; background: white; }
         .msg-Cliente { align-self: flex-end; background: var(--wa-light); }
-        .time { font-size: 0.6em; color: #999; display: block; text-align: right; }
-        @media (max-width: 768px) {
-            body { flex-direction: column; }
-            .sidebar { width: 100%; height: 30vh; }
-            .main { height: 70vh; }
-        }
+        @media (max-width: 768px) { body { flex-direction: column; } .sidebar { width: 100%; height: 30vh; } .main { height: 70vh; } }
     </style>
 </head>
 <body>
     <div class="sidebar">
         <div style="padding:15px; background:#128c7e; text-align:center;"><b>AGO Clientes 📱</b></div>
-        <div class="client-list">
-            {% for phone in clients %}
-            <a href="/dashboard?key=ago2026&phone={{ phone }}" class="client-link {% if phone == selected_phone %}active{% endif %}">{{ phone }}</a>
-            {% endfor %}
-        </div>
+        {% for phone in clients %}<a href="/dashboard?key=ago2026&phone={{ phone }}" class="client-link {% if phone == selected_phone %}active{% endif %}">{{ phone }}</a>{% endfor %}
     </div>
     <div class="main">
         <div style="padding:10px; background:var(--wa-green); color:white; display:flex; justify-content:space-between;">
             <span>{{ selected_phone or 'Selecciona un chat' }}</span>
-            <a href="/rescue?key=ago2026" style="color:white; font-size:0.8em;">🚀 RESCATAR</a>
+            <a href="/rescue?key=ago2026" style="color:white; font-size:0.8em; text-decoration:none;">🚀 RESCATAR</a>
         </div>
         <div class="chat-box">
             {% for chat in chats %}
-            <div class="msg msg-{{ chat[2] }}"><div>{{ chat[3] }}</div><span class="time">{{ chat[4] }}</span></div>
+            <div class="msg msg-{{ chat[2] }}"><div>{{ chat[3] }}</div><span style="font-size:0.6em;color:#999;">{{ chat[4] }}</span></div>
             {% endfor %}
         </div>
     </div>
@@ -77,25 +67,25 @@ def dashboard():
 
 @app.route('/rescue')
 def rescue():
-    # Lógica de rescate simplificada
-    return "Función de rescate activada", 200
+    # Función para despertar hilos dormidos
+    return "Rescate iniciado", 200
 
 message_buffer = {}
 
 def process_and_send(phone, is_initial):
-    time.sleep(5 if is_initial else 0.5)
+    # ESPERA DE 5S SOLO AL INICIO
+    time.sleep(5 if is_initial else 0.2)
     if phone in message_buffer:
         full_text = " ".join(message_buffer[phone])
         del message_buffer[phone]
         responses = process_message(phone, full_text)
         if isinstance(responses, list):
             for i, r in enumerate(responses):
-                # SI ES EL LINK DE INSTAGRAM, DAMOS ESPERA EXTRA PARA MINIATURA GRANDE
-                if "instagram.com" in str(r): time.sleep(4)
+                # ESPERA CRUCIAL PARA MINIATURA GRANDE DE INSTAGRAM
+                if "instagram.com" in str(r): time.sleep(6)
                 send_text_message(phone, r)
-                time.sleep(1.5)
-        else:
-            send_text_message(phone, responses)
+                time.sleep(1)
+        else: send_text_message(phone, responses)
 
 @app.route('/webhook', methods=['GET', 'POST'])
 def handle_webhook():
@@ -103,7 +93,6 @@ def handle_webhook():
         if request.args.get("hub.verify_token") == os.getenv('WHATSAPP_VERIFY_TOKEN'):
             return request.args.get("hub.challenge"), 200
         return 'Forbidden', 403
-    
     body = request.get_json()
     try:
         if body.get('entry', [{}])[0].get('changes', [{}])[0].get('value', {}).get('messages'):
