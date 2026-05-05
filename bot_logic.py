@@ -1,14 +1,11 @@
 import sqlite3, json, datetime, time
 from sheets_service import search_properties, format_property_response, format_property_list, filter_properties, fetch_all_properties
 
-# RUTA PARA EL VOLUMEN (Nunca se borra)
-DB_PATH = "/app/data/ago_business_v34.db"
+# RUTA DEFINITIVA PARA MEMORIA ETERNA
+DB_PATH = "/app/data/ago_final_v35.db"
 OWNER_NUMBER = "573024929820"
 
-def get_db():
-    # Timeout de 20s para evitar que el bot se quede mudo por bloqueos
-    conn = sqlite3.connect(DB_PATH, timeout=20)
-    return conn
+def get_db(): return sqlite3.connect(DB_PATH, timeout=30)
 
 def init_db():
     conn = get_db()
@@ -49,22 +46,20 @@ def process_message(phone, message):
     save_chat(phone, "Cliente", message)
     user = get_user(phone)
     msg = message.lower().strip()
+    res = ""
     
-    # --- FLUJO ANTIBUCLE (V1.34) ---
     if user["state"] == "new":
         update_user(phone, state="awaiting_name")
         res = "¡Hola! Soy *AGO*, te voy a ayudar a encontrar tu próximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar hoy? 😊"
     
     elif user["state"] == "awaiting_name":
-        # Cualquier cosa que responda ahora se guarda como nombre para salir del bucle
         name = extract_name(message) or message.strip().title()
         if len(name.split()) > 3: name = name.split()[0]
         update_user(phone, name=name, state="ready")
-        res = f"¡Un placer saludarte, *{name}*! 🤝 Ya tengo todo listo para mostrarte nuestras mejores opciones.\n\n¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
+        res = f"¡Un placer, *{name}*! 🤝 ¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
     
     else:
         name = user["name"] or "Amigo"
-        # Lógica de Requisitos
         if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento']):
             props = fetch_all_properties(); target = None
             if user["last_property_id"]:
@@ -76,15 +71,12 @@ def process_message(phone, message):
                 if "apartaestudio" not in target.get('Tipo','').lower():
                     res.append(f"📄 *Estudio El Libertador:* https://www.ellibertador.co/\n🏢 *Datos:* 16004 | Asesor: Diego Ramirez | notificaciones@agoinmo.com")
             else: res = f"*{name}*, dime el código del inmueble para darte los requisitos exactos. 🏠"
-        
-        elif any(k in msg for k in ['gracias', 'ya agende', 'listo', 'adiós']):
+        elif any(k in msg for k in ['gracias', 'ya agende', 'adiós', 'listo']):
             res = f"¡Con todo el gusto, *{name}*! 😊 ¡Que tengas un día maravilloso! 🏠✨"
-
         elif any(k in msg for k in ['asesor', 'persona', 'humano']):
             text = f"Hola, soy {name}. Interesado en {user['last_type_desc'] or 'un inmueble'}"
             link = f"https://wa.me/573024929820?text={text.replace(' ', '%20')}"
             res = f"¡Excelente decisión, *{name}*! 📱 Te paso con Diego Ramirez para cerrar los detalles:\n👉 {link}"
-
         elif msg.isdigit():
             val = int(msg)
             if user["last_results"] and 1 <= val <= len(user["last_results"]):
@@ -95,8 +87,6 @@ def process_message(phone, message):
             elif val == 2: return process_message(phone, "apartaestudio")
             elif val == 3: return process_message(phone, "cali")
             elif val == 4: return process_message(phone, "jamundi")
-            else: res = "Por favor elige un número de la lista. 🎯"
-        
         else:
             results = filter_properties(msg) if len(msg.split()) < 3 else []
             if not results: results = search_properties(msg)
@@ -119,11 +109,11 @@ def handle_property_response(prop, name):
     if video_url:
         clean_url = video_url.split('?')[0]
         if not clean_url.endswith('/'): clean_url += '/'
-        return [main_text, clean_url] # SE ENVÍA LINK SOLO PARA MINIATURA GIGANTE
+        return [main_text, clean_url]
     return main_text
 
 def extract_name(text):
-    text = text.lower().strip(); phrases = ['soy ', 'me llamo ', 'mi nombre es ']
+    text = text.lower().strip(); phrases = ['soy ', 'me llamo ', 'mi nombre es ', 'habla ']
     for p in phrases:
         if p in text:
             parts = text.split(p)
