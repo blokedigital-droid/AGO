@@ -7,7 +7,7 @@ from whatsapp_service import send_text_message
 load_dotenv()
 app = Flask(__name__)
 
-# --- DASHBOARD RESPONSIVO (V1.37) ---
+# --- DASHBOARD RESPONSIVO (V1.38) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -25,7 +25,7 @@ HTML_TEMPLATE = """
         .msg { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; max-width: 85%; font-size: 0.95em; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
         .msg-AGO { align-self: flex-start; background: white; }
         .msg-Cliente { align-self: flex-end; background: var(--wa-light); }
-        @media (max-width: 768px) { body { flex-direction: column; } .sidebar { width: 100%; height: 35vh; } .main { height: 65vh; } }
+        @media (max-width: 768px) { body { flex-direction: column; } .sidebar { width: 100%; height: 30vh; } .main { height: 70vh; } }
     </style>
 </head>
 <body>
@@ -34,9 +34,7 @@ HTML_TEMPLATE = """
         {% for phone in clients %}<a href="/dashboard?key=ago2026&phone={{ phone }}" class="client-link {% if phone == selected_phone %}active{% endif %}">{{ phone }}</a>{% endfor %}
     </div>
     <div class="main">
-        <div style="padding:10px; background:var(--wa-green); color:white; font-weight:bold;">
-            <span>{{ selected_phone or 'Selecciona un chat' }}</span>
-        </div>
+        <div style="padding:10px; background:var(--wa-green); color:white; font-weight:bold;"><span>{{ selected_phone or 'Selecciona un chat' }}</span></div>
         <div class="chat-box">
             {% for chat in chats %}
             <div class="msg msg-{{ chat[2] }}"><div>{{ chat[3] }}</div><span style="font-size:0.6em;color:#999;">{{ chat[4] }}</span></div>
@@ -48,7 +46,7 @@ HTML_TEMPLATE = """
 """
 
 @app.route('/health')
-def health(): return jsonify({"status": "active", "version": "1.37"}), 200
+def health(): return jsonify({"status": "active", "version": "1.38"}), 200
 
 @app.route('/dashboard')
 def dashboard():
@@ -74,13 +72,11 @@ def process_and_send(phone, is_initial):
         responses = process_message(phone, full_text)
         if isinstance(responses, list):
             for i, r in enumerate(responses):
-                # ESPERA CRUCIAL DE 8 SEGUNDOS PARA QUE WHATSAPP GENERE LA MINIATURA GIGANTE
-                if "instagram.com" in str(r):
-                    time.sleep(8) 
+                # ESPERA DE 4 SEGUNDOS ANTES DEL VIDEO PARA QUE CARGUE LA MINIATURA
+                if "instagram.com" in str(r): time.sleep(4)
                 send_text_message(phone, r)
-                time.sleep(1.5)
-        else:
-            send_text_message(phone, responses)
+                time.sleep(1)
+        else: send_text_message(phone, responses)
 
 @app.route('/webhook', methods=['GET', 'POST'])
 def handle_webhook():
@@ -88,7 +84,6 @@ def handle_webhook():
         if request.args.get("hub.verify_token") == os.getenv('WHATSAPP_VERIFY_TOKEN'):
             return request.args.get("hub.challenge"), 200
         return 'Forbidden', 403
-    
     body = request.get_json()
     try:
         if body.get('entry', [{}])[0].get('changes', [{}])[0].get('value', {}).get('messages'):
@@ -100,8 +95,7 @@ def handle_webhook():
                 if phone not in message_buffer:
                     message_buffer[phone] = [text]
                     threading.Thread(target=process_and_send, args=(phone, is_initial)).start()
-                else:
-                    message_buffer[phone].append(text)
+                else: message_buffer[phone].append(text)
     except: pass
     return jsonify({"status": "ok"}), 200
 
