@@ -7,7 +7,7 @@ from whatsapp_service import send_text_message
 load_dotenv()
 app = Flask(__name__)
 
-# --- MONITOR DE VENTAS PROFESIONAL (RESPONSIVO) ---
+# --- DASHBOARD RESPONSIVO (V1.37) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -16,16 +16,16 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         :root { --wa-green: #075e54; --wa-light: #dcf8c6; --wa-bg: #e5ddd5; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; display: flex; height: 100vh; flex-direction: row; }
-        .sidebar { width: 300px; background: var(--wa-green); color: white; display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; display: flex; height: 100vh; overflow: hidden; flex-direction: row; }
+        .sidebar { width: 320px; background: var(--wa-green); color: white; display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
         .client-link { display: block; padding: 15px; color: white; text-decoration: none; border-bottom: 1px solid #ffffff11; }
         .client-link.active { background: #25d366; font-weight: bold; border-left: 6px solid white; }
         .main { flex-grow: 1; display: flex; flex-direction: column; background: var(--wa-bg); overflow: hidden; }
-        .chat-box { flex-grow: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; }
-        .msg { margin-bottom: 10px; padding: 10px; border-radius: 8px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        .chat-box { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
+        .msg { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; max-width: 85%; font-size: 0.95em; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
         .msg-AGO { align-self: flex-start; background: white; }
         .msg-Cliente { align-self: flex-end; background: var(--wa-light); }
-        @media (max-width: 768px) { body { flex-direction: column; } .sidebar { width: 100%; height: 30vh; } .main { height: 70vh; } }
+        @media (max-width: 768px) { body { flex-direction: column; } .sidebar { width: 100%; height: 35vh; } .main { height: 65vh; } }
     </style>
 </head>
 <body>
@@ -34,9 +34,8 @@ HTML_TEMPLATE = """
         {% for phone in clients %}<a href="/dashboard?key=ago2026&phone={{ phone }}" class="client-link {% if phone == selected_phone %}active{% endif %}">{{ phone }}</a>{% endfor %}
     </div>
     <div class="main">
-        <div style="padding:10px; background:var(--wa-green); color:white; display:flex; justify-content:space-between;">
+        <div style="padding:10px; background:var(--wa-green); color:white; font-weight:bold;">
             <span>{{ selected_phone or 'Selecciona un chat' }}</span>
-            <a href="/rescue?key=ago2026" style="color:white; font-size:0.8em; text-decoration:none;">🚀 RESCATAR</a>
         </div>
         <div class="chat-box">
             {% for chat in chats %}
@@ -49,7 +48,7 @@ HTML_TEMPLATE = """
 """
 
 @app.route('/health')
-def health(): return jsonify({"status": "active"}), 200
+def health(): return jsonify({"status": "active", "version": "1.37"}), 200
 
 @app.route('/dashboard')
 def dashboard():
@@ -65,15 +64,9 @@ def dashboard():
     conn.close()
     return render_template_string(HTML_TEMPLATE, clients=clients, chats=chats, selected_phone=selected_phone)
 
-@app.route('/rescue')
-def rescue():
-    # Función para despertar hilos dormidos
-    return "Rescate iniciado", 200
-
 message_buffer = {}
 
 def process_and_send(phone, is_initial):
-    # ESPERA DE 5S SOLO AL INICIO
     time.sleep(5 if is_initial else 0.2)
     if phone in message_buffer:
         full_text = " ".join(message_buffer[phone])
@@ -81,11 +74,13 @@ def process_and_send(phone, is_initial):
         responses = process_message(phone, full_text)
         if isinstance(responses, list):
             for i, r in enumerate(responses):
-                # ESPERA CRUCIAL PARA MINIATURA GRANDE DE INSTAGRAM
-                if "instagram.com" in str(r): time.sleep(6)
+                # ESPERA CRUCIAL DE 8 SEGUNDOS PARA QUE WHATSAPP GENERE LA MINIATURA GIGANTE
+                if "instagram.com" in str(r):
+                    time.sleep(8) 
                 send_text_message(phone, r)
-                time.sleep(1)
-        else: send_text_message(phone, responses)
+                time.sleep(1.5)
+        else:
+            send_text_message(phone, responses)
 
 @app.route('/webhook', methods=['GET', 'POST'])
 def handle_webhook():
@@ -93,6 +88,7 @@ def handle_webhook():
         if request.args.get("hub.verify_token") == os.getenv('WHATSAPP_VERIFY_TOKEN'):
             return request.args.get("hub.challenge"), 200
         return 'Forbidden', 403
+    
     body = request.get_json()
     try:
         if body.get('entry', [{}])[0].get('changes', [{}])[0].get('value', {}).get('messages'):
@@ -104,7 +100,8 @@ def handle_webhook():
                 if phone not in message_buffer:
                     message_buffer[phone] = [text]
                     threading.Thread(target=process_and_send, args=(phone, is_initial)).start()
-                else: message_buffer[phone].append(text)
+                else:
+                    message_buffer[phone].append(text)
     except: pass
     return jsonify({"status": "ok"}), 200
 
