@@ -48,17 +48,17 @@ def process_message(phone, message):
     msg = message.lower().strip()
     res = ""
 
-    # --- 1. LÓGICA DE RE-BIENVENIDA (40 MINUTOS) ---
+    # 1. RE-BIENVENIDA (40 MINUTOS)
     if user["last_interaction"] and user["state"] == "ready":
         last_time = datetime.datetime.strptime(user["last_interaction"], '%Y-%m-%d %H:%M:%S')
         diff = (datetime.datetime.utcnow() - last_time).total_seconds() / 60
         if diff > 40 and user["name"]:
-            update_user(phone) # Actualiza tiempo
-            res = f"¡Hola de nuevo, *{user['name']}*! 👋 Me alegra que vuelvas. ¿En qué te puedo ayudar ahora?\n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
+            update_user(phone)
+            res = f"¡Hola de nuevo, *{user['name']}*! 👋 Me alegra que vuelvas. ¿En qué te puedo ayudar ahora?\n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *Casas*\n4. *Cali*\n5. *Jamundí*"
             save_chat(phone, "AGO", res)
             return res
 
-    # --- 2. FLUJO DE BIENVENIDA (ANTI-BUCLE) ---
+    # 2. BIENVENIDA INICIAL
     if user["state"] == "new":
         update_user(phone, state="awaiting_name")
         res = "¡Hola! Soy *AGO*, te voy a ayudar a encontrar tu próximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar hoy? 😊"
@@ -67,12 +67,12 @@ def process_message(phone, message):
         name = extract_name(message) or message.strip().title()
         if len(name.split()) > 2: name = name.split()[0]
         update_user(phone, name=name, state="ready")
-        res = f"¡Un placer, *{name}*! 🤝 Ya tengo todo listo para mostrarte nuestras mejores opciones. ¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *Cali*\n4. *Jamundí*"
+        res = f"¡Un placer, *{name}*! 🤝 Ya tengo todo listo para mostrarte nuestras mejores opciones. ¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *Casas*\n4. *Cali*\n5. *Jamundí*"
     
     else:
         name = user["name"] or "Amigo"
         # REQUISITOS
-        if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento']):
+        if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento', 'que piden']):
             props = fetch_all_properties(); target = None
             if user["last_property_id"]:
                 for p in props:
@@ -84,7 +84,7 @@ def process_message(phone, message):
                     res.append(f"📄 *Estudio El Libertador:* https://www.ellibertador.co/\n🏢 *Datos:* 16004 | Asesor: Diego Ramirez | notificaciones@agoinmo.com")
             else: res = f"*{name}*, dime el código del inmueble para darte los requisitos exactos. 🏠"
         
-        elif any(k in msg for k in ['gracias', 'ya agende', 'adiós', 'listo']) and len(msg.split()) < 5:
+        elif any(k in msg for k in ['gracias', 'ya agende', 'adiós', 'listo', 'chau']) and len(msg.split()) < 5:
             res = f"¡Con todo el gusto, *{name}*! 😊 ¡Que tengas un día maravilloso! 🏠✨"
 
         elif any(k in msg for k in ['asesor', 'persona', 'humano', 'hablar']):
@@ -100,8 +100,9 @@ def process_message(phone, message):
                 res = handle_property_response(selected, name)
             elif val == 1: return process_message(phone, "apartamento")
             elif val == 2: return process_message(phone, "apartaestudio")
-            elif val == 3: return process_message(phone, "cali")
-            elif val == 4: return process_message(phone, "jamundi")
+            elif val == 3: return process_message(phone, "casas")
+            elif val == 4: return process_message(phone, "cali")
+            elif val == 5: return process_message(phone, "jamundi")
         
         else:
             results = filter_properties(msg) if len(msg.split()) < 3 else []
@@ -111,7 +112,7 @@ def process_message(phone, message):
                 res = handle_property_response(results[0], name)
             elif len(results) > 1:
                 update_user(phone, last_results=results); res = format_property_list(results, name, "que coinciden")
-            else: res = f"¡Ups, *{name}*! 🔍 No encontré algo exacto. ¿Buscas apartamentos o apartaestudios? 🏠"
+            else: res = f"¡Ups, *{name}*! 🔍 No encontré algo exacto. ¿Buscas casas, apartamentos o apartaestudios? 🏠"
 
     update_user(phone)
     if isinstance(res, list):
@@ -123,7 +124,9 @@ def handle_property_response(prop, name):
     from sheets_service import format_property_response
     main_text = format_property_response(prop, name)
     video_url = prop.get('Link_Video', '').strip()
-    if video_url: return [main_text, f"🎥 *¡Mira este recorrido increíble!* Te vas a enamorar. Dale clic aquí: 👇\n\n{video_url}"]
+    if video_url:
+        video_msg = f"🎥 *¡Mira este recorrido increíble!* Te vas a enamorar. Dale clic aquí: 👇\n\n{video_url}"
+        return [main_text, video_msg]
     return main_text
 
 def extract_name(text):
