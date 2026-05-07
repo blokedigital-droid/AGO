@@ -2,7 +2,7 @@ import sqlite3, json, datetime, time
 from sheets_service import search_properties, format_property_response, format_property_list, filter_properties, fetch_all_properties
 
 # RUTA DEFINITIVA PARA MEMORIA ETERNA
-DB_PATH = "/app/data/ago_final_v35.db"
+DB_PATH = "/app/data/ago_business_final_v38.db"
 OWNER_NUMBER = "573024929820"
 
 def get_db(): return sqlite3.connect(DB_PATH, timeout=30)
@@ -56,7 +56,7 @@ def process_message(phone, message):
         name = extract_name(message) or message.strip().title()
         if len(name.split()) > 3: name = name.split()[0]
         update_user(phone, name=name, state="ready")
-        res = f"¡Un placer, *{name}*! 🤝 ¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
+        res = f"¡Un placer saludarte, *{name}*! 🤝 Ya tengo todo listo para mostrarte nuestras mejores opciones.\n\n¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
     
     else:
         name = user["name"] or "Amigo"
@@ -71,7 +71,7 @@ def process_message(phone, message):
                 if "apartaestudio" not in target.get('Tipo','').lower():
                     res.append(f"📄 *Estudio El Libertador:* https://www.ellibertador.co/\n🏢 *Datos:* 16004 | Asesor: Diego Ramirez | notificaciones@agoinmo.com")
             else: res = f"*{name}*, dime el código del inmueble para darte los requisitos exactos. 🏠"
-        elif any(k in msg for k in ['gracias', 'ya agende', 'adiós', 'listo']):
+        elif any(k in msg for k in ['gracias', 'ya agende', 'adiós', 'listo']) and len(msg.split()) < 5:
             res = f"¡Con todo el gusto, *{name}*! 😊 ¡Que tengas un día maravilloso! 🏠✨"
         elif any(k in msg for k in ['asesor', 'persona', 'humano']):
             text = f"Hola, soy {name}. Interesado en {user['last_type_desc'] or 'un inmueble'}"
@@ -107,13 +107,13 @@ def handle_property_response(prop, name):
     main_text = format_property_response(prop, name)
     video_url = prop.get('Link_Video', '').strip()
     if video_url:
-        clean_url = video_url.split('?')[0]
-        if not clean_url.endswith('/'): clean_url += '/'
-        return [main_text, clean_url]
+        # MENSAJE DE VIDEO CON TEXTO ATRACTIVO
+        video_msg = f"🎥 *¡Mira este recorrido increíble!* Te vas a enamorar de cada rincón. Dale clic aquí para ver el video completo: 👇\n\n{video_url}"
+        return [main_text, video_msg]
     return main_text
 
 def extract_name(text):
-    text = text.lower().strip(); phrases = ['soy ', 'me llamo ', 'mi nombre es ', 'habla ']
+    text = text.lower().strip(); phrases = ['soy ', 'me llamo ', 'mi nombre es ']
     for p in phrases:
         if p in text:
             parts = text.split(p)
