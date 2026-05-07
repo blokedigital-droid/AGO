@@ -17,10 +17,20 @@ def get_available_properties():
 
 def filter_properties(query):
     available = get_available_properties(); q = query.lower().strip()
+    
+    # 🏙️ Inteligencia de Zonas y Barrios
+    if 'norte' in q: return [p for p in available if 'norte' in p.get('Ubicacion','').lower() or 'norte' in p.get('Ciudad','').lower()]
+    if 'sur' in q: return [p for p in available if 'sur' in p.get('Ubicacion','').lower() or 'sur' in p.get('Ciudad','').lower()]
+    if 'cordoba' in q or 'córdoba' in q: return [p for p in available if 'cordoba' in p.get('Tipo','').lower() or 'cordoba' in p.get('Ubicacion','').lower()]
+    if 'alamos' in q or 'álamos' in q: return [p for p in available if 'alamos' in p.get('Ubicacion','').lower()]
+    if 'flora' in q: return [p for p in available if 'flora' in p.get('Tipo','').lower() or 'flora' in p.get('Ubicacion','').lower()]
+    if 'jamundi' in q or 'jamundí' in q: return [p for p in available if 'jamundi' in p.get('Ciudad','').lower()]
+    
+    # 🏠 Categorías base (Incluyendo Casas)
     if q in ['apartamento', 'apartamentos']: return [p for p in available if 'apartamento' in p.get('Tipo','').lower() and 'apartaestudio' not in p.get('Tipo','').lower()]
     if q in ['apartaestudio', 'apartaestudios', 'estudio']: return [p for p in available if 'apartaestudio' in p.get('Tipo','').lower()]
-    if q in ['cali']: return [p for p in available if 'cali' in p.get('Ciudad','').lower()]
-    if q in ['jamundi', 'jamundí']: return [p for p in available if 'jamundi' in p.get('Ciudad','').lower()]
+    if q in ['casa', 'casas']: return [p for p in available if 'casa' in p.get('Tipo','').lower()]
+    
     return []
 
 def search_properties(query):
@@ -28,7 +38,8 @@ def search_properties(query):
     if len(q) < 3 and not q.isdigit(): return []
     scored = []
     for prop in available:
-        score = 0; text = f"{prop.get('Tipo','')} {prop.get('Ubicacion','')} {prop.get('Ciudad','')} {prop.get('ID','')}".lower()
+        score = 0
+        text = f"{prop.get('Tipo','')} {prop.get('Ubicacion','')} {prop.get('Ciudad','')} {prop.get('ID','')}".lower()
         if q == prop.get('ID','').lower(): score += 100
         if q in text: score += 50
         ratio = fuzz.partial_ratio(q, text)
@@ -53,9 +64,8 @@ def format_property_response(prop, name=""):
     desc = prop.get('Descripcion_Plus', '').strip()
     if desc: res += f"📝 *Descripción:* \n{desc}\n\n"
     
-    if prop.get('Link_Fotos'): res += f"📸 *FOTOS:* {prop.get('Link_Fotos')}\n"
-    res += f"\n📅 *AGÉNDATE AQUÍ:* \n{prop.get('Link_agenamiento', 'https://wa.me/573024929820')}"
-    res += f"\n\n*¿Lograste agendar o prefieres hablar con un asesor?* 😊"
+    res += f"📅 *AGÉNDATE AQUÍ:* \n{prop.get('Link_agenamiento', 'https://wa.me/573024929820')}"
+    res += f"\n\n*¿Ya lograste agendar o prefieres hablar con un asesor?* 😊"
     return res
 
 def format_property_list(props, name, context=""):
