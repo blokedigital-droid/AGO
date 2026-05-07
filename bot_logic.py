@@ -2,14 +2,14 @@ import sqlite3, json, datetime, time
 from sheets_service import search_properties, format_property_response, format_property_list, filter_properties, fetch_all_properties
 
 # RUTA DEFINITIVA PARA MEMORIA ETERNA
-DB_PATH = "/app/data/ago_business_main.db"
+DB_PATH = "/app/data/ago_business_final_v41.db"
 OWNER_NUMBER = "573024929820"
 
-def get_db(): return sqlite3.connect(DB_PATH, timeout=30)
+def get_db(): return sqlite3.connect(DB_PATH, timeout=35)
 
 def init_db():
     conn = get_db()
-    conn.execute("CREATE TABLE IF NOT EXISTS users (phone TEXT PRIMARY KEY, name TEXT, state TEXT, last_results TEXT, last_property_id TEXT, last_type_desc TEXT, last_interaction TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("CREATE TABLE IF NOT EXISTS users (phone TEXT PRIMARY KEY, name TEXT, state TEXT, last_results TEXT, last_property_id TEXT, last_type_desc TEXT, last_interaction TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS chat_history (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT, sender TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
     conn.commit(); conn.close()
 
@@ -37,8 +37,8 @@ def update_user(phone, **kwargs):
     for key, value in kwargs.items(): user[key] = value
     try:
         conn = get_db()
-        conn.execute("INSERT OR REPLACE INTO users (phone, name, state, last_results, last_property_id, last_type_desc, last_interaction) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", 
-                     (phone, user["name"], user["state"], json.dumps(user["last_results"]), user["last_property_id"], user["last_type_desc"]))
+        conn.execute("INSERT OR REPLACE INTO users (phone, name, state, last_results, last_property_id, last_type_desc, last_interaction) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                     (phone, user["name"], user["state"], json.dumps(user["last_results"]), user["last_property_id"], user["last_type_desc"], datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')))
         conn.commit(); conn.close()
     except: pass
 
@@ -46,53 +46,52 @@ def process_message(phone, message):
     save_chat(phone, "Cliente", message)
     user = get_user(phone)
     msg = message.lower().strip()
-    
-    # --- LÓGICA DE RE-BIENVENIDA (REGLA DE 40 MINUTOS) ---
-    if user["last_interaction"]:
+    res = ""
+
+    # --- 1. LÓGICA DE RE-BIENVENIDA (40 MINUTOS) ---
+    if user["last_interaction"] and user["state"] == "ready":
         last_time = datetime.datetime.strptime(user["last_interaction"], '%Y-%m-%d %H:%M:%S')
         diff = (datetime.datetime.utcnow() - last_time).total_seconds() / 60
         if diff > 40 and user["name"]:
-            name = user["name"]
-            update_user(phone, state="ready") # Reseteamos el estado pero guardamos el nombre
-            res = f"¡Hola de nuevo, *{name}*! 😊 Me alegra que vuelvas. ¿En qué te puedo ayudar hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
+            update_user(phone) # Actualiza tiempo
+            res = f"¡Hola de nuevo, *{user['name']}*! 👋 Me alegra que vuelvas. ¿En qué te puedo ayudar ahora?\n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
             save_chat(phone, "AGO", res)
             return res
 
-    # --- FLUJO NORMAL ---
-    if user["state"] == "new" or not user["name"]:
-        extracted = extract_name(message)
-        if extracted:
-            update_user(phone, name=extracted, state="ready")
-            res = [f"¡Hola! Soy *AGO*, tu asistente del Grupo Inmobiliario. 🏠✨", f"¡Qué buen nombre, *{extracted}*! 🥳 Te ayudaré a encontrar tu próximo hogar. ¿Qué buscas hoy?", "1. *Apartamentos*\n2. *Apartaestudios*\n3. *Cali*\n4. *Jamundí*"]
-        else:
-            update_user(phone, state="awaiting_name")
-            res = "¡Hola! Soy *AGO*, te voy a ayudar a encontrar tu próximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar hoy? 😊"
+    # --- 2. FLUJO DE BIENVENIDA (ANTI-BUCLE) ---
+    if user["state"] == "new":
+        update_user(phone, state="awaiting_name")
+        res = "¡Hola! Soy *AGO*, te voy a ayudar a encontrar tu próximo hogar! 🏠✨\n\n¿Con quién tengo el gusto de hablar hoy? 😊"
     
     elif user["state"] == "awaiting_name":
         name = extract_name(message) or message.strip().title()
-        if len(name.split()) > 3: name = name.split()[0]
+        if len(name.split()) > 2: name = name.split()[0]
         update_user(phone, name=name, state="ready")
-        res = f"¡Un placer saludarte, *{name}*! 🤝 Ya tengo todo listo para mostrarte lo mejor que tenemos.\n\n¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *En Cali*\n4. *En Jamundí*"
+        res = f"¡Un placer, *{name}*! 🤝 Ya tengo todo listo para mostrarte nuestras mejores opciones. ¿Qué buscas hoy? \n\n1. *Apartamentos*\n2. *Apartaestudios*\n3. *Cali*\n4. *Jamundí*"
     
     else:
         name = user["name"] or "Amigo"
+        # REQUISITOS
         if any(k in msg for k in ['requisito', 'papeles', 'necesito', 'documento']):
             props = fetch_all_properties(); target = None
             if user["last_property_id"]:
                 for p in props:
                     if p.get('ID') == user["last_property_id"]: target = p; break
             if target:
-                reqs = target.get('Requisitos', '').strip() or "Contáctame para los detalles exactos. 😊"
+                reqs = target.get('Requisitos', '').strip() or "Escríbeme para darte los requisitos exactos. 😊"
                 res = [f"📋 *Requisitos para:* {target.get('Tipo','Inmueble')} ({target.get('ID','')})", reqs]
                 if "apartaestudio" not in target.get('Tipo','').lower():
-                    res.append(f"📄 *Estudio El Libertador:* https://www.ellibertador.co/\n🏢 *Datos:* 16004 | Diego Ramirez | notificaciones@agoinmo.com")
+                    res.append(f"📄 *Estudio El Libertador:* https://www.ellibertador.co/\n🏢 *Datos:* 16004 | Asesor: Diego Ramirez | notificaciones@agoinmo.com")
             else: res = f"*{name}*, dime el código del inmueble para darte los requisitos exactos. 🏠"
-        elif any(k in msg for k in ['gracias', 'ya agende', 'adiós', 'listo', 'chau']):
+        
+        elif any(k in msg for k in ['gracias', 'ya agende', 'adiós', 'listo']) and len(msg.split()) < 5:
             res = f"¡Con todo el gusto, *{name}*! 😊 ¡Que tengas un día maravilloso! 🏠✨"
+
         elif any(k in msg for k in ['asesor', 'persona', 'humano', 'hablar']):
             text = f"Hola, soy {name}. Interesado en {user['last_type_desc'] or 'un inmueble'}"
             link = f"https://wa.me/573024929820?text={text.replace(' ', '%20')}"
             res = f"¡Excelente decisión, *{name}*! 📱 Te paso con Diego Ramirez para cerrar los detalles:\n👉 {link}"
+
         elif msg.isdigit():
             val = int(msg)
             if user["last_results"] and 1 <= val <= len(user["last_results"]):
@@ -103,6 +102,7 @@ def process_message(phone, message):
             elif val == 2: return process_message(phone, "apartaestudio")
             elif val == 3: return process_message(phone, "cali")
             elif val == 4: return process_message(phone, "jamundi")
+        
         else:
             results = filter_properties(msg) if len(msg.split()) < 3 else []
             if not results: results = search_properties(msg)
@@ -112,8 +112,8 @@ def process_message(phone, message):
             elif len(results) > 1:
                 update_user(phone, last_results=results); res = format_property_list(results, name, "que coinciden")
             else: res = f"¡Ups, *{name}*! 🔍 No encontré algo exacto. ¿Buscas apartamentos o apartaestudios? 🏠"
-    
-    update_user(phone) # Actualiza el timestamp de interacción
+
+    update_user(phone)
     if isinstance(res, list):
         for r in res: save_chat(phone, "AGO", r)
     else: save_chat(phone, "AGO", res)
@@ -123,12 +123,13 @@ def handle_property_response(prop, name):
     from sheets_service import format_property_response
     main_text = format_property_response(prop, name)
     video_url = prop.get('Link_Video', '').strip()
-    if video_url: return [main_text, f"🎥 *¡Mira el recorrido aquí!* 👇\n{video_url}"]
+    if video_url: return [main_text, f"🎥 *¡Mira este recorrido increíble!* Te vas a enamorar. Dale clic aquí: 👇\n\n{video_url}"]
     return main_text
 
 def extract_name(text):
     text = text.lower().strip(); phrases = ['soy ', 'me llamo ', 'mi nombre es ']
     for p in phrases:
         if p in text:
-            parts = text.split(p); return parts[1].split()[0].title() if len(parts) > 1 else None
+            parts = text.split(p)
+            if len(parts) > 1: return parts[1].split()[0].title()
     return None
